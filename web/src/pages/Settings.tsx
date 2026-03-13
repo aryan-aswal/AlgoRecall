@@ -16,7 +16,7 @@ declare global {
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [phone, setPhone] = useState("");
