@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Background rounded square -->
+  <rect width="64" height="64" rx="14" fill="#7C3AED"/>
+
+  <!-- Brain shape inspired by Lucide Brain, scaled and centered in the square -->
+  <!-- Left hemisphere -->
+  <path d="M32 14
+    C28 14 23 16 21 20
+    C18 18 14 20 13 24
+    C11 26 11 29 12 32
+    C10 34 10 38 13 40
+    C12 44 15 47 19 47
+    C20 50 23 52 26 51
+    L26 36
+    C24 35 23 33 23 31
+    C23 29 24 27 26 26
+    L26 14
+    Z"
+    fill="white" opacity="0.95"/>
+
+  <!-- Right hemisphere -->
+  <path d="M32 14
+    C36 14 41 16 43 20
+    C46 18 50 20 51 24
+    C53 26 53 29 52 32
+    C54 34 54 38 51 40
+    C52 44 49 47 45 47
+    C44 50 41 52 38 51
+    L38 36
+    C40 35 41 33 41 31
+    C41 29 40 27 38 26
+    L38 14
+    Z"
+    fill="white" opacity="0.95"/>
+
+  <!-- Center division line -->
+  <line x1="32" y1="14" x2="32" y2="52" stroke="#7C3AED" stroke-width="1.5"/>
+
+  <!-- Left brain folds -->
+  <path d="M23 28 C20 29 19 32 21 34" stroke="#7C3AED" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.6"/>
+  <path d="M21 37 C19 39 20 42 23 43" stroke="#7C3AED" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.6"/>
+  <path d="M24 22 C21 23 20 26 22 27" stroke="#7C3AED" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.6"/>
+
+  <!-- Right brain folds -->
+  <path d="M41 28 C44 29 45 32 43 34" stroke="#7C3AED" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.6"/>
+  <path d="M43 37 C45 39 44 42 41 43" stroke="#7C3AED" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.6"/>
+  <path d="M40 22 C43 23 44 26 42 27" stroke="#7C3AED" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.6"/>
+
+  <!-- Small circuit/node dots for "algo" feel -->
+  <circle cx="18" cy="31" r="1.5" fill="#A78BFA" opacity="0.8"/>
+  <circle cx="46" cy="31" r="1.5" fill="#A78BFA" opacity="0.8"/>
+  <circle cx="32" cy="20" r="1.5" fill="#A78BFA" opacity="0.8"/>
+</svg>
