@@ -32,7 +32,11 @@ public interface RevisionScheduleRepository extends JpaRepository<RevisionSchedu
 
     List<RevisionSchedule> findByUserIdAndStatusOrderByScheduledDateDesc(Long userId, RevisionSchedule.Status status);
 
-    List<RevisionSchedule> findByScheduledDateBeforeAndStatus(LocalDate date, RevisionSchedule.Status status);
+    @Query("SELECT rs FROM RevisionSchedule rs " +
+           "JOIN FETCH rs.user " +
+           "JOIN FETCH rs.problem " +
+           "WHERE rs.scheduledDate < :date AND rs.status = :status")
+    List<RevisionSchedule> findByScheduledDateBeforeAndStatus(@Param("date") LocalDate date, @Param("status") RevisionSchedule.Status status);
 
     @Query("SELECT rs FROM RevisionSchedule rs " +
            "JOIN FETCH rs.user " +

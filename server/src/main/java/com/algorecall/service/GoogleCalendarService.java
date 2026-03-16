@@ -371,9 +371,10 @@ public class GoogleCalendarService {
             totalMinutes += (rs.getRevisionNumber() == 1) ? newDuration : revDuration;
         }
         LocalTime endTime = startTime.plusMinutes(totalMinutes);
-
-        String startDateTime = date.atTime(startTime).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-        String endDateTime = date.atTime(endTime).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
+        String startDateTime = date.atTime(startTime).atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        String endDateTime = date.atTime(endTime).atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 
         // Build HTML description with proper formatting
         StringBuilder desc = new StringBuilder();
