@@ -22,6 +22,7 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -35,6 +36,8 @@ public class GoogleCalendarService {
     private static final String CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
     private static final String TOKEN_URL = "https://oauth2.googleapis.com/token";
     private static final String CALENDAR_ID = "primary";
+    private static final int DEFAULT_REVISION_DURATION_MIN = 15;
+    private static final int DEFAULT_NEW_PROBLEM_DURATION_MIN = 25;
 
     private final RevisionScheduleRepository revisionScheduleRepository;
     private final UserRepository userRepository;
@@ -154,8 +157,10 @@ public class GoogleCalendarService {
             return;
         }
 
-        int revDuration = pref.getRevisionDuration() != null ? pref.getRevisionDuration() : 15;
-        int newDuration = pref.getNewProblemDuration() != null ? pref.getNewProblemDuration() : 25;
+        int revDuration = resolveDuration(pref.getRevisionDuration(), DEFAULT_REVISION_DURATION_MIN,
+                "revisionDuration", username);
+        int newDuration = resolveDuration(pref.getNewProblemDuration(), DEFAULT_NEW_PROBLEM_DURATION_MIN,
+                "newProblemDuration", username);
 
         // Get ALL revisions for this user (need full picture to avoid duplicates)
         List<RevisionSchedule> allRevisions = revisionScheduleRepository.findByUserId(user.getId());
@@ -267,8 +272,10 @@ public class GoogleCalendarService {
 
         UserPreference pref = userPreferenceRepository.findByUserId(user.getId())
                 .orElseGet(() -> UserPreference.builder().user(user).build());
-        int revDuration = pref.getRevisionDuration() != null ? pref.getRevisionDuration() : 15;
-        int newDuration = pref.getNewProblemDuration() != null ? pref.getNewProblemDuration() : 25;
+        int revDuration = resolveDuration(pref.getRevisionDuration(), DEFAULT_REVISION_DURATION_MIN,
+                "revisionDuration", username);
+        int newDuration = resolveDuration(pref.getNewProblemDuration(), DEFAULT_NEW_PROBLEM_DURATION_MIN,
+                "newProblemDuration", username);
 
         List<RevisionSchedule> allRevisions = revisionScheduleRepository.findByUserId(user.getId());
         List<RevisionSchedule> unsynced = allRevisions.stream()
@@ -357,6 +364,10 @@ public class GoogleCalendarService {
 
     private Map<String, Object> buildEventPayload(List<RevisionSchedule> group,
                                                    int revDuration, int newDuration) {
+        if (group == null || group.isEmpty()) {
+            throw new IllegalArgumentException("Cannot build calendar event payload from an empty group");
+        }
+
         RevisionSchedule first = group.get(0);
         LocalDate date = first.getScheduledDate();
         String planName = first.getStudyPlanProblem().getStudyPlan().getName();
@@ -366,15 +377,19 @@ public class GoogleCalendarService {
             startTime = first.getStudyPlanProblem().getStudyPlan().getReminderTime();
         }
         // Calculate total duration per problem
+        int safeRevDuration = Math.max(1, revDuration);
+        int safeNewDuration = Math.max(1, newDuration);
         int totalMinutes = 0;
         for (RevisionSchedule rs : group) {
-            totalMinutes += (rs.getRevisionNumber() == 1) ? newDuration : revDuration;
+            totalMinutes += (rs.getRevisionNumber() == 1) ? safeNewDuration : safeRevDuration;
         }
-        LocalTime endTime = startTime.plusMinutes(totalMinutes);
+        int safeTotalMinutes = Math.max(1, totalMinutes);
+        LocalDateTime startDateTimeObj = date.atTime(startTime);
+        LocalDateTime endDateTimeObj = startDateTimeObj.plusMinutes(safeTotalMinutes);
         
         java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
-        String startDateTime = date.atTime(startTime).atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-        String endDateTime = date.atTime(endTime).atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        String startDateTime = startDateTimeObj.atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        String endDateTime = endDateTimeObj.atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 
         // Build HTML description with proper formatting
         StringBuilder desc = new StringBuilder();
@@ -384,7 +399,7 @@ public class GoogleCalendarService {
 
         for (int i = 0; i < group.size(); i++) {
             RevisionSchedule rs = group.get(i);
-            int dur = (rs.getRevisionNumber() == 1) ? newDuration : revDuration;
+            int dur = (rs.getRevisionNumber() == 1) ? safeNewDuration : safeRevDuration;
             String title = rs.getProblem().getTitle();
             String problemUrl = rs.getProblem().getUrl();
             String platform = rs.getProblem().getPlatform() != null ? rs.getProblem().getPlatform() : "";
@@ -460,6 +475,18 @@ public class GoogleCalendarService {
         }
 
         throw new RuntimeException("Failed to create Google Calendar event: empty response");
+    }
+
+    private int resolveDuration(Integer configuredValue, int fallbackValue, String settingName, String username) {
+        if (configuredValue == null) {
+            return fallbackValue;
+        }
+        if (configuredValue <= 0) {
+            log.warn("Invalid {}={} for user {}. Falling back to {} minutes.",
+                    settingName, configuredValue, username, fallbackValue);
+            return fallbackValue;
+        }
+        return configuredValue;
     }
 
     private String updatePlanDayCalendarEvent(String eventId, List<RevisionSchedule> group,
