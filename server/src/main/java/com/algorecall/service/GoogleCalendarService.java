@@ -20,10 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -38,6 +40,7 @@ public class GoogleCalendarService {
     private static final String CALENDAR_ID = "primary";
     private static final int DEFAULT_REVISION_DURATION_MIN = 15;
     private static final int DEFAULT_NEW_PROBLEM_DURATION_MIN = 25;
+    private static final String CAL_SYNC_PATCH_MARKER = "CAL_SYNC_PATCH_V2";
 
     private final RevisionScheduleRepository revisionScheduleRepository;
     private final UserRepository userRepository;
@@ -218,6 +221,7 @@ public class GoogleCalendarService {
                     .orElse(null);
 
             try {
+                String traceId = UUID.randomUUID().toString().substring(0, 8);
                 String eventId;
                 if (existingEventId != null) {
                     eventId = updatePlanDayCalendarEvent(existingEventId, deduped, accessToken, revDuration, newDuration);
@@ -230,6 +234,8 @@ public class GoogleCalendarService {
                     revisionScheduleRepository.save(rs);
                     synced++;
                 }
+                log.info("{} synced plan={} date={} revisions={} traceId={}",
+                        CAL_SYNC_PATCH_MARKER, planId, date, unsyncedGroup.size(), traceId);
             } catch (Exception e) {
                 log.error("Failed to sync calendar event for plan {} on {}: {}",
                         planId, date, e.getMessage());
@@ -452,12 +458,14 @@ public class GoogleCalendarService {
     private String createPlanDayCalendarEvent(List<RevisionSchedule> group, String accessToken,
                                               int revDuration, int newDuration) {
         String url = CALENDAR_API_BASE + "/calendars/" + CALENDAR_ID + "/events";
+        String traceId = UUID.randomUUID().toString().substring(0, 8);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         Map<String, Object> event = buildEventPayload(group, revDuration, newDuration);
+        validateEventPayload(event, traceId);
 
         try {
             String body = objectMapper.writeValueAsString(event);
@@ -469,8 +477,17 @@ public class GoogleCalendarService {
                 JsonNode responseNode = objectMapper.readTree(response.getBody());
                 return responseNode.get("id").asText();
             }
+        } catch (RestClientResponseException e) {
+            log.error("{} traceId={} Google Calendar CREATE error status={} start={} end={} responseBody={}",
+                    CAL_SYNC_PATCH_MARKER,
+                    traceId,
+                    e.getStatusCode().value(),
+                    extractDateTime(event, "start"),
+                    extractDateTime(event, "end"),
+                    e.getResponseBodyAsString());
+            throw new RuntimeException("Failed to create Google Calendar event: " + e.getMessage());
         } catch (Exception e) {
-            log.error("Google Calendar CREATE error: {}", e.getMessage());
+            log.error("{} traceId={} Google Calendar CREATE error: {}", CAL_SYNC_PATCH_MARKER, traceId, e.getMessage());
             throw new RuntimeException("Failed to create Google Calendar event: " + e.getMessage());
         }
 
@@ -492,12 +509,14 @@ public class GoogleCalendarService {
     private String updatePlanDayCalendarEvent(String eventId, List<RevisionSchedule> group,
                                               String accessToken, int revDuration, int newDuration) {
         String url = CALENDAR_API_BASE + "/calendars/" + CALENDAR_ID + "/events/" + eventId;
+        String traceId = UUID.randomUUID().toString().substring(0, 8);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         Map<String, Object> event = buildEventPayload(group, revDuration, newDuration);
+        validateEventPayload(event, traceId);
 
         try {
             String body = objectMapper.writeValueAsString(event);
@@ -509,12 +528,49 @@ public class GoogleCalendarService {
                 log.info("Updated calendar event {} with {} problems", eventId, group.size());
                 return eventId;
             }
+        } catch (RestClientResponseException e) {
+            log.warn("{} traceId={} Failed to update event {}, creating new one: status={} start={} end={} responseBody={}",
+                    CAL_SYNC_PATCH_MARKER,
+                    traceId,
+                    eventId,
+                    e.getStatusCode().value(),
+                    extractDateTime(event, "start"),
+                    extractDateTime(event, "end"),
+                    e.getResponseBodyAsString());
+            return createPlanDayCalendarEvent(group, accessToken, revDuration, newDuration);
         } catch (Exception e) {
-            log.warn("Failed to update event {}, creating new one: {}", eventId, e.getMessage());
+            log.warn("{} traceId={} Failed to update event {}, creating new one: {}",
+                    CAL_SYNC_PATCH_MARKER, traceId, eventId, e.getMessage());
             // Fall back to creating a new event if update fails
             return createPlanDayCalendarEvent(group, accessToken, revDuration, newDuration);
         }
 
         return eventId;
+    }
+
+    private void validateEventPayload(Map<String, Object> event, String traceId) {
+        String startStr = extractDateTime(event, "start");
+        String endStr = extractDateTime(event, "end");
+        if (startStr == null || endStr == null) {
+            throw new IllegalStateException("Missing start/end dateTime in calendar payload");
+        }
+
+        OffsetDateTime start = OffsetDateTime.parse(startStr);
+        OffsetDateTime end = OffsetDateTime.parse(endStr);
+        if (!end.isAfter(start)) {
+            throw new IllegalStateException("Invalid payload range, end must be after start");
+        }
+
+        log.info("{} traceId={} payload-window start={} end={}", CAL_SYNC_PATCH_MARKER, traceId, startStr, endStr);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractDateTime(Map<String, Object> event, String key) {
+        Object node = event.get(key);
+        if (!(node instanceof Map<?, ?> mapNode)) {
+            return null;
+        }
+        Object dateTime = ((Map<String, Object>) mapNode).get("dateTime");
+        return dateTime != null ? dateTime.toString() : null;
     }
 }
