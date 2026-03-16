@@ -1,24 +1,27 @@
-# Stage 1: Build the Application
-FROM maven:3.9.6-eclipse-temurin-21 AS build
-WORKDIR /app
+# Stage 1: Build the application with Java 17 (matches pom.xml)
+FROM maven:3.9.9-eclipse-temurin-17 AS build
+WORKDIR /workspace
 
-# Copy the pom.xml and download dependencies (caches this layer)
-COPY pom.xml .
-RUN mvn dependency:go-offline -B
+# Copy only pom first to leverage Docker layer cache for dependencies
+COPY pom.xml ./
+RUN mvn -B dependency:go-offline
 
-# Copy the actual source code and build the JAR
+# Copy source and build the fat jar
 COPY src ./src
-RUN mvn clean package -DskipTests
+RUN mvn -B clean package -DskipTests
 
-# Stage 2: Run the Application
-FROM eclipse-temurin:21-jre-alpine
+# Stage 2: Run as non-root on a slim JRE image
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-# Copy the JAR from the build stage
-COPY --from=build /app/target/*.jar app.jar
+RUN groupadd --system app && useradd --system --gid app --home-dir /app app
+COPY --from=build /workspace/target/*.jar /app/app.jar
+RUN chown app:app /app/app.jar
 
-# Expose the port the app runs on
+USER app
 EXPOSE 8080
 
-# Run the backend
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Tuned defaults for containers; can be overridden at runtime
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]
