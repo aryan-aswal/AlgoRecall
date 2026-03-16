@@ -206,7 +206,6 @@ class AnalyticsServiceTest {
                 .dateAdded(LocalDate.now()).build();
         testPlan.getProblems().add(spp);
         when(studyPlanRepository.findByUserUsername("alice")).thenReturn(List.of(testPlan));
-        when(problemRepository.countByTopicTagPattern(anyString())).thenReturn(5L);
 
         TopicMasteryResponse result = analyticsService.getTopicMastery("alice");
 

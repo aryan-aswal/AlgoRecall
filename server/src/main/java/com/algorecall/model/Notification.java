@@ -7,7 +7,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "notifications")
+@Table(name = "notifications", indexes = {@Index(name = "idx_notif_scheduled_sent", columnList = "scheduled_time,sent")})
 @Getter
 @Setter
 @NoArgsConstructor

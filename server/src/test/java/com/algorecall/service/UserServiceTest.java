@@ -75,10 +75,6 @@ class UserServiceTest {
             saved.setId(1L);
             return saved;
         });
-        // register calls loadUserByUsername which calls findByUsername
-        when(userRepository.findByUsername("bob")).thenReturn(Optional.of(
-                User.builder().id(1L).username("bob").email("bob@example.com")
-                        .password("$encoded$").role(User.Role.USER).build()));
         when(jwtUtil.generateToken(any(UserDetails.class))).thenReturn("jwt-token");
 
         AuthResponse response = userService.register(req);

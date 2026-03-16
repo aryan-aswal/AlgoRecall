@@ -6,7 +6,7 @@ import lombok.*;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "revision_schedules")
+@Table(name = "revision_schedules", indexes = {@Index(name = "idx_rs_scheduled_status", columnList = "scheduled_date,status"), @Index(name = "idx_rs_scheduled_status_notified", columnList = "scheduled_date,status,notified")})
 @Getter
 @Setter
 @NoArgsConstructor
