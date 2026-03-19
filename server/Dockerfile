@@ -1,5 +1,5 @@
 # Stage 1: Build the application with Java 17 (matches pom.xml)
-FROM maven:3.9.9-eclipse-temurin-17 AS build
+FROM docker.io/library/maven:3.9.9-eclipse-temurin-17 AS build
 WORKDIR /workspace
 
 # Copy only pom first to leverage Docker layer cache for dependencies
@@ -11,7 +11,7 @@ COPY src ./src
 RUN mvn -B clean package -DskipTests
 
 # Stage 2: Run as non-root on a slim JRE image
-FROM eclipse-temurin:17-jre-jammy
+FROM docker.io/library/eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
