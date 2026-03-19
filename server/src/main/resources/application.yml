@@ -14,12 +14,12 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     generate-ddl: true
     properties:
       hibernate:
         default_schema: public
-        format_sql: true
+        format_sql: false
 
   jackson:
     serialization:
