@@ -20,6 +20,7 @@ public class EmailNotificationService {
 
     private static final Pattern URL_PATTERN = Pattern.compile("(https?://[^\\s<]+)");
     private static final String FRONTEND_URL = "http://localhost:3000";
+    private static final String MAIL_TEMPLATE_VERSION = "mail-v3";
 
     private final JavaMailSender mailSender;
 
@@ -48,7 +49,7 @@ public class EmailNotificationService {
 
             helper.setFrom(fromAddress);
             helper.setTo(userEmail);
-            helper.setSubject("AlgoRecall – Revision Reminder");
+            helper.setSubject("AlgoRecall - Revision Reminder [" + MAIL_TEMPLATE_VERSION + "]");
             helper.setText(buildHtmlBody(notification), true);
 
             mailSender.send(mimeMessage);
@@ -115,6 +116,7 @@ public class EmailNotificationService {
                         <p>DSA Revision Tracker</p>
                     </div>
                     <div class="body">
+                        <p style="margin:0 0 8px 0;color:#6b7280;font-size:12px;">Template: %s</p>
                         <p class="greeting">Hey %s! 👋</p>
                         <div class="reminder-card">
                             %s
@@ -129,7 +131,7 @@ public class EmailNotificationService {
                 </div>
             </body>
             </html>
-            """.formatted(username, formattedMessage, ctaUrl);
+            """.formatted(MAIL_TEMPLATE_VERSION, username, formattedMessage, ctaUrl);
     }
 
     private String escapeHtml(String value) {
