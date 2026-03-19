@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -55,6 +56,9 @@ public class GoogleCalendarService {
 
     @Value("${app.google.calendar.client-secret:}")
     private String clientSecret;
+
+    @Value("${app.timezone:Asia/Kolkata}")
+    private String appTimezone;
 
     // ─── OAuth token exchange ───────────────────────────────────────
 
@@ -171,7 +175,7 @@ public class GoogleCalendarService {
         List<RevisionSchedule> unsynced = allRevisions.stream()
                 .filter(rs -> rs.getStatus() == RevisionSchedule.Status.PENDING)
                 .filter(rs -> rs.getCalendarEventId() == null)
-                .filter(rs -> !rs.getScheduledDate().isBefore(LocalDate.now()))
+                .filter(rs -> !rs.getScheduledDate().isBefore(LocalDate.now(appZoneId())))
                 .toList();
 
         if (unsynced.isEmpty()) return;
@@ -287,7 +291,7 @@ public class GoogleCalendarService {
         List<RevisionSchedule> unsynced = allRevisions.stream()
                 .filter(rs -> rs.getStatus() == RevisionSchedule.Status.PENDING)
                 .filter(rs -> rs.getCalendarEventId() == null)
-                .filter(rs -> !rs.getScheduledDate().isBefore(LocalDate.now()))
+                .filter(rs -> !rs.getScheduledDate().isBefore(LocalDate.now(appZoneId())))
                 .toList();
 
         Map<String, List<RevisionSchedule>> unsyncedGrouped = unsynced.stream()
@@ -393,7 +397,7 @@ public class GoogleCalendarService {
         LocalDateTime startDateTimeObj = date.atTime(startTime);
         LocalDateTime endDateTimeObj = startDateTimeObj.plusMinutes(safeTotalMinutes);
         
-        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
+        ZoneId zone = appZoneId();
         String startDateTime = startDateTimeObj.atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
         String endDateTime = endDateTimeObj.atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 
@@ -434,12 +438,12 @@ public class GoogleCalendarService {
 
         Map<String, String> start = new LinkedHashMap<>();
         start.put("dateTime", startDateTime);
-        start.put("timeZone", "Asia/Kolkata");
+        start.put("timeZone", resolvedTimezone());
         event.put("start", start);
 
         Map<String, String> end = new LinkedHashMap<>();
         end.put("dateTime", endDateTime);
-        end.put("timeZone", "Asia/Kolkata");
+        end.put("timeZone", resolvedTimezone());
         event.put("end", end);
 
         Map<String, Object> reminders = new LinkedHashMap<>();
@@ -572,5 +576,13 @@ public class GoogleCalendarService {
         }
         Object dateTime = ((Map<String, Object>) mapNode).get("dateTime");
         return dateTime != null ? dateTime.toString() : null;
+    }
+
+    private ZoneId appZoneId() {
+        return ZoneId.of(resolvedTimezone());
+    }
+
+    private String resolvedTimezone() {
+        return (appTimezone == null || appTimezone.isBlank()) ? "Asia/Kolkata" : appTimezone;
     }
 }

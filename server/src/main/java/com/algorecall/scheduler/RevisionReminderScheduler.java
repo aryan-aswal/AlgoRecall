@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -26,6 +27,10 @@ public class RevisionReminderScheduler {
     private final AtomicBoolean schedulerRunning = new AtomicBoolean(false);
     @Value("${app.notification.reminder-minutes:30}")
     private int reminderMinutes;
+
+    @Value("${app.timezone:Asia/Kolkata}")
+    private String appTimezone;
+
     private long calendarSyncCounter = 0;
 
     /**
@@ -71,7 +76,7 @@ public class RevisionReminderScheduler {
 
     @Transactional
     public void autoSkipOverdueRevisions() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(appZoneId());
         List<RevisionSchedule> overdueRevisions = revisionScheduleRepository.findByScheduledDateBeforeAndStatus(today, RevisionSchedule.Status.PENDING);
         for (RevisionSchedule rs : overdueRevisions) {
             rs.setStatus(RevisionSchedule.Status.SKIPPED);
@@ -82,7 +87,7 @@ public class RevisionReminderScheduler {
 
     @Transactional
     public void createTodayReminders() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(appZoneId());
         List<RevisionSchedule> todaysRevisions = revisionScheduleRepository.findByScheduledDateAndStatusAndNotified(today, RevisionSchedule.Status.PENDING, false);
 
         if (!todaysRevisions.isEmpty()) {
@@ -94,5 +99,10 @@ public class RevisionReminderScheduler {
                 revisionScheduleRepository.save(rs);
             }
         }
+    }
+
+    private ZoneId appZoneId() {
+        String timezone = (appTimezone == null || appTimezone.isBlank()) ? "Asia/Kolkata" : appTimezone;
+        return ZoneId.of(timezone);
     }
 }

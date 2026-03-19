@@ -17,11 +17,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +42,9 @@ public class StudyPlanService {
     private final RevisionService revisionService;
     private final LeetCodeImporter leetCodeImporter;
     private final GoogleCalendarService googleCalendarService;
+
+    @Value("${app.timezone:Asia/Kolkata}")
+    private String appTimezone;
 
     @Transactional(readOnly = true)
     public List<StudyPlanResponse> getPlansByUsername(String username) {
@@ -105,7 +110,7 @@ public class StudyPlanService {
                         .problem(problem)
                         .orderIndex(order++)
                         .completed(false)
-                        .dateAdded(LocalDate.now())
+                        .dateAdded(LocalDate.now(appZoneId()))
                         .build();
 
                 plan.getProblems().add(spp);
@@ -177,7 +182,7 @@ public class StudyPlanService {
                 .problem(problem)
                 .orderIndex(nextOrder)
                 .completed(false)
-                .dateAdded(LocalDate.now())
+                .dateAdded(LocalDate.now(appZoneId()))
                 .build();
 
         plan.getProblems().add(spp);
@@ -213,5 +218,10 @@ public class StudyPlanService {
         plan.getProblems().removeIf(spp -> spp.getProblem().getId().equals(problemId));
         plan = studyPlanRepository.save(plan);
         return studyPlanMapper.toResponse(plan);
+    }
+
+    private ZoneId appZoneId() {
+        String timezone = (appTimezone == null || appTimezone.isBlank()) ? "Asia/Kolkata" : appTimezone;
+        return ZoneId.of(timezone);
     }
 }

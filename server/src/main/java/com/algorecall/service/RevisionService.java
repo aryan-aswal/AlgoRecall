@@ -7,11 +7,13 @@ import com.algorecall.repository.RevisionScheduleRepository;
 import com.algorecall.repository.StudyPlanRepository;
 import com.algorecall.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 
 @Service
@@ -24,10 +26,13 @@ public class RevisionService {
     private final UserRepository userRepository;
     private final StudyPlanRepository studyPlanRepository;
 
+    @Value("${app.timezone:Asia/Kolkata}")
+    private String appTimezone;
+
     @Transactional
     public List<RevisionSchedule> generateRevisions(StudyPlanProblem spp, User user, Problem problem, List<Integer> intervals) {
         List<Integer> effectiveIntervals = (intervals != null && !intervals.isEmpty()) ? intervals : DEFAULT_INTERVALS;
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(appZoneId());
         List<RevisionSchedule> schedules = new ArrayList<>();
 
         // Revision #1: first attempt on the day the plan is created (day 0)
@@ -60,7 +65,7 @@ public class RevisionService {
     public List<RevisionScheduleResponse> getTodaysRevisions(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(appZoneId());
 
         List<RevisionSchedule> revisions = revisionScheduleRepository
                 .findByUserIdAndScheduledDateAndStatus(user.getId(), today, RevisionSchedule.Status.PENDING);
@@ -72,7 +77,7 @@ public class RevisionService {
     public List<RevisionScheduleResponse> getAllTodaysRevisions(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(appZoneId());
 
         List<RevisionSchedule> revisions = revisionScheduleRepository
                 .findByUserIdAndScheduledDate(user.getId(), today);
@@ -203,6 +208,11 @@ public class RevisionService {
             case MEDIUM -> "Medium";
             case HARD -> "Hard";
         };
+    }
+
+    private ZoneId appZoneId() {
+        String timezone = (appTimezone == null || appTimezone.isBlank()) ? "Asia/Kolkata" : appTimezone;
+        return ZoneId.of(timezone);
     }
 }
 

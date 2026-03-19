@@ -10,10 +10,15 @@ import org.springframework.stereotype.Service;
 
 import jakarta.mail.internet.MimeMessage;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailNotificationService {
+
+    private static final Pattern URL_PATTERN = Pattern.compile("(https?://[^\\s<]+)");
 
     private final JavaMailSender mailSender;
 
@@ -56,18 +61,26 @@ public class EmailNotificationService {
         String username = notification.getUser().getUsername();
         String rawMessage = notification.getMessage();
 
-        // Convert bullet points and newlines to HTML
-        String htmlMessage = rawMessage.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-        String[] lines = htmlMessage.split("\n");
+        // Convert bullet points/newlines to HTML and auto-link URLs in the message.
+        String[] lines = rawMessage.split("\n");
         StringBuilder sb = new StringBuilder();
         boolean inList = false;
         for (String line : lines) {
-            if (line.startsWith("• ")) {
+            String trimmed = line.stripTrailing();
+            if (trimmed.isBlank()) {
+                if (inList) { sb.append("</ul>"); inList = false; }
+                sb.append("<div style=\"height:8px;\"></div>");
+                continue;
+            }
+
+            if (trimmed.startsWith("• ")) {
                 if (!inList) { sb.append("<ul style=\"margin:8px 0;padding-left:20px;\">"); inList = true; }
-                sb.append("<li style=\"margin:4px 0;\">").append(line.substring(2)).append("</li>");
+                String escaped = escapeHtml(trimmed.substring(2));
+                sb.append("<li style=\"margin:6px 0;\">").append(linkifyUrls(escaped)).append("</li>");
             } else {
                 if (inList) { sb.append("</ul>"); inList = false; }
-                sb.append("<p style=\"margin:4px 0;\">").append(line).append("</p>");
+                String escaped = escapeHtml(trimmed);
+                sb.append("<p style=\"margin:4px 0;\">").append(linkifyUrls(escaped)).append("</p>");
             }
         }
         if (inList) sb.append("</ul>");
@@ -115,5 +128,27 @@ public class EmailNotificationService {
             </body>
             </html>
             """.formatted(username, formattedMessage);
+    }
+
+    private String escapeHtml(String value) {
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+
+    private String linkifyUrls(String escapedText) {
+        Matcher matcher = URL_PATTERN.matcher(escapedText);
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            String url = matcher.group(1);
+            String anchor = "<a href=\"" + url + "\" target=\"_blank\" rel=\"noopener noreferrer\" "
+                    + "style=\"color:#4f46e5;text-decoration:none;\">" + url + "</a>";
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(anchor));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
     }
 }

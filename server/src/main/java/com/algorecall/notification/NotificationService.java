@@ -5,15 +5,20 @@ import com.algorecall.model.RevisionSchedule;
 import com.algorecall.model.User;
 import com.algorecall.model.UserPreference;
 import com.algorecall.repository.NotificationRepository;
+import com.algorecall.repository.RevisionScheduleRepository;
 import com.algorecall.repository.UserPreferenceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -21,13 +26,17 @@ import java.util.List;
 @Slf4j
 public class NotificationService {
 
-    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy");
 
     private final NotificationRepository notificationRepository;
+    private final RevisionScheduleRepository revisionScheduleRepository;
     private final EmailNotificationService emailNotificationService;
     private final PushNotificationService pushNotificationService;
     private final SmsNotificationService smsNotificationService;
     private final UserPreferenceRepository userPreferenceRepository;
+
+    @Value("${app.timezone:Asia/Kolkata}")
+    private String appTimezone;
 
     @Transactional
     public Notification createNotification(User user, String message, LocalDateTime scheduledTime, Notification.Type type) {
@@ -75,15 +84,7 @@ public class NotificationService {
             String planName = firstRev.getStudyPlanProblem() != null
                     ? firstRev.getStudyPlanProblem().getStudyPlan().getName() : "Study Plan";
 
-            // Build email message (verbose, lists all problems)
-            StringBuilder sb = new StringBuilder();
-            sb.append(String.format("Your \"%s\" session starts at %s (%d problem(s)):\n",
-                    planName, reminderTime.toString(), group.size()));
-            for (RevisionSchedule rev : group) {
-                sb.append(String.format("• Revision #%d – \"%s\"\n", rev.getRevisionNumber(), rev.getProblem().getTitle()));
-            }
-            sb.append("Don't forget to review!");
-            String emailMessage = sb.toString();
+            String emailMessage = buildDetailedEmailMessage(planName, reminderTime, group);
 
             // Build push message (clean and minimal)
             String pushMessage = String.format("📚 %s · %d problem(s) at %s",
@@ -112,8 +113,7 @@ public class NotificationService {
 
     @Transactional
     public void sendPendingNotifications() {
-        // Use explicit IST timezone so notifications fire at the correct local time
-        LocalDateTime now = LocalDateTime.now(IST);
+        LocalDateTime now = LocalDateTime.now(appZoneId());
         List<Notification> pending = notificationRepository.findByScheduledTimeBeforeAndSentFalse(now);
 
         for (Notification notification : pending) {
@@ -167,7 +167,61 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<Notification> getUserNotifications(Long userId) {
-        LocalDateTime now = LocalDateTime.now(IST);
+        LocalDateTime now = LocalDateTime.now(appZoneId());
         return notificationRepository.findDueByUserIdAndType(userId, Notification.Type.PUSH, now);
+    }
+
+    private String buildDetailedEmailMessage(String planName, LocalTime reminderTime, List<RevisionSchedule> group) {
+        StringBuilder sb = new StringBuilder();
+        LocalDate sessionDate = group.get(0).getScheduledDate();
+
+        sb.append(String.format("Your \"%s\" session is scheduled for %s at %s (%d problem(s)).\n",
+                planName,
+                sessionDate.format(DATE_FORMATTER),
+                reminderTime,
+                group.size()));
+        sb.append("Today's revision list:\n");
+
+        List<RevisionSchedule> sortedGroup = group.stream()
+                .sorted(Comparator.comparing((RevisionSchedule rs) -> rs.getProblem().getTitle(), String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(RevisionSchedule::getRevisionNumber))
+                .toList();
+
+        for (RevisionSchedule revision : sortedGroup) {
+            List<RevisionSchedule> fullSchedule = revisionScheduleRepository
+                    .findByStudyPlanProblemId(revision.getStudyPlanProblem().getId())
+                    .stream()
+                    .sorted(Comparator.comparing(RevisionSchedule::getRevisionNumber))
+                    .toList();
+
+            String scheduleSummary = fullSchedule.stream()
+                    .map(rs -> String.format("R%d: %s (%s)",
+                            rs.getRevisionNumber(),
+                            rs.getScheduledDate().format(DATE_FORMATTER),
+                            rs.getStatus().name()))
+                    .reduce((left, right) -> left + " | " + right)
+                    .orElse("No schedule available");
+
+            String problemUrl = revision.getProblem().getUrl();
+            String linkLine = (problemUrl != null && !problemUrl.isBlank())
+                    ? problemUrl
+                    : "Link not available";
+
+            sb.append(String.format("• %s\n", revision.getProblem().getTitle()));
+            sb.append(String.format("  Platform: %s\n", revision.getProblem().getPlatform()));
+            sb.append(String.format("  Current Revision: R%d on %s\n",
+                    revision.getRevisionNumber(),
+                    revision.getScheduledDate().format(DATE_FORMATTER)));
+            sb.append(String.format("  Problem Link: %s\n", linkLine));
+            sb.append(String.format("  Full Schedule: %s\n", scheduleSummary));
+        }
+
+        sb.append("\nKeep going — consistency compounds over time.");
+        return sb.toString();
+    }
+
+    private ZoneId appZoneId() {
+        String timezone = (appTimezone == null || appTimezone.isBlank()) ? "Asia/Kolkata" : appTimezone;
+        return ZoneId.of(timezone);
     }
 }
