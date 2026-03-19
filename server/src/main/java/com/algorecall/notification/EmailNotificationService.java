@@ -19,8 +19,6 @@ import java.util.regex.Pattern;
 public class EmailNotificationService {
 
     private static final Pattern URL_PATTERN = Pattern.compile("(https?://[^\\s<]+)");
-    private static final String FRONTEND_URL = "http://localhost:3000";
-    private static final String MAIL_TEMPLATE_VERSION = "mail-v3";
 
     private final JavaMailSender mailSender;
 
@@ -29,6 +27,9 @@ public class EmailNotificationService {
 
     @Value("${spring.mail.username:noreply@algorecall.com}")
     private String fromAddress;
+
+    @Value("${app.frontend-url:https://algo-recall-seven.vercel.app}")
+    private String frontendUrl;
 
     public void send(Notification notification) {
         if (!mailEnabled) {
@@ -49,7 +50,7 @@ public class EmailNotificationService {
 
             helper.setFrom(fromAddress);
             helper.setTo(userEmail);
-            helper.setSubject("AlgoRecall - Revision Reminder [" + MAIL_TEMPLATE_VERSION + "]");
+            helper.setSubject("AlgoRecall - Revision Reminder");
             helper.setText(buildHtmlBody(notification), true);
 
             mailSender.send(mimeMessage);
@@ -62,7 +63,7 @@ public class EmailNotificationService {
     private String buildHtmlBody(Notification notification) {
         String username = notification.getUser().getUsername();
         String rawMessage = notification.getMessage();
-        String ctaUrl = FRONTEND_URL;
+        String ctaUrl = frontendUrl;
 
         // Convert bullet points/newlines to HTML and auto-link URLs in the message.
         String[] lines = rawMessage.split("\n");
@@ -116,7 +117,6 @@ public class EmailNotificationService {
                         <p>DSA Revision Tracker</p>
                     </div>
                     <div class="body">
-                        <p style="margin:0 0 8px 0;color:#6b7280;font-size:12px;">Template: %s</p>
                         <p class="greeting">Hey %s! 👋</p>
                         <div class="reminder-card">
                             %s
@@ -131,7 +131,7 @@ public class EmailNotificationService {
                 </div>
             </body>
             </html>
-            """.formatted(MAIL_TEMPLATE_VERSION, username, formattedMessage, ctaUrl);
+            """.formatted(username, formattedMessage, ctaUrl);
     }
 
     private String escapeHtml(String value) {
