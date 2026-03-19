@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import jakarta.mail.internet.MimeMessage;
 
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,6 +20,7 @@ import java.util.regex.Pattern;
 public class EmailNotificationService {
 
     private static final Pattern URL_PATTERN = Pattern.compile("(https?://[^\\s<]+)");
+    private static final String SAFE_DEFAULT_FRONTEND_URL = "https://algo-recall-seven.vercel.app";
 
     private final JavaMailSender mailSender;
 
@@ -63,6 +65,7 @@ public class EmailNotificationService {
     private String buildHtmlBody(Notification notification) {
         String username = notification.getUser().getUsername();
         String rawMessage = notification.getMessage();
+        String ctaUrl = resolveFrontendUrl();
 
         // Convert bullet points/newlines to HTML and auto-link URLs in the message.
         String[] lines = rawMessage.split("\n");
@@ -130,7 +133,7 @@ public class EmailNotificationService {
                 </div>
             </body>
             </html>
-            """.formatted(username, formattedMessage, frontendUrl);
+            """.formatted(username, formattedMessage, ctaUrl);
     }
 
     private String escapeHtml(String value) {
@@ -153,5 +156,28 @@ public class EmailNotificationService {
         }
         matcher.appendTail(sb);
         return sb.toString();
+    }
+
+    private String resolveFrontendUrl() {
+        String candidate = frontendUrl;
+        if (candidate == null || candidate.isBlank()) {
+            return SAFE_DEFAULT_FRONTEND_URL;
+        }
+
+        String trimmed = candidate.trim();
+        String lowered = trimmed.toLowerCase(Locale.ROOT);
+        if (!lowered.startsWith("http://") && !lowered.startsWith("https://")) {
+            trimmed = "https://" + trimmed;
+            lowered = trimmed.toLowerCase(Locale.ROOT);
+        }
+
+        if (lowered.contains("://localhost")
+                || lowered.contains("://127.0.0.1")
+                || lowered.contains("://0.0.0.0")) {
+            log.warn("Unsafe frontend URL '{}' detected in mail config; using safe default", frontendUrl);
+            return SAFE_DEFAULT_FRONTEND_URL;
+        }
+
+        return trimmed;
     }
 }

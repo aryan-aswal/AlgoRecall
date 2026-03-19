@@ -1,6 +1,7 @@
 package com.algorecall.notification;
 
 import com.algorecall.model.Notification;
+import com.algorecall.model.Problem;
 import com.algorecall.model.RevisionSchedule;
 import com.algorecall.model.User;
 import com.algorecall.model.UserPreference;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -85,14 +87,19 @@ public class NotificationService {
                     .atTime(reminderTime)
                     .minusMinutes(reminderMinutes);
 
-            String planName = firstRev.getStudyPlanProblem() != null
-                    ? firstRev.getStudyPlanProblem().getStudyPlan().getName() : "Study Plan";
+            String planName = "Study Plan";
+            if (firstRev.getStudyPlanProblem() != null
+                    && firstRev.getStudyPlanProblem().getStudyPlan() != null
+                    && firstRev.getStudyPlanProblem().getStudyPlan().getName() != null
+                    && !firstRev.getStudyPlanProblem().getStudyPlan().getName().isBlank()) {
+                planName = firstRev.getStudyPlanProblem().getStudyPlan().getName();
+            }
 
             String emailMessage = buildDetailedEmailMessage(planName, reminderTime, group);
 
             // Build push message (clean and minimal)
             String pushMessage = String.format("📚 %s · %d problem(s) at %s",
-                    planName, group.size(), reminderTime.toString());
+                    planName, group.size(), reminderTime);
 
             UserPreference pref = userPreferenceRepository.findByUserId(user.getId())
                     .orElse(null);
@@ -228,10 +235,7 @@ public class NotificationService {
                     ? "No pending revisions"
                     : String.join(" | ", pendingSteps);
 
-            String problemUrl = revision.getProblem().getUrl();
-            String linkLine = (problemUrl != null && !problemUrl.isBlank())
-                    ? problemUrl
-                    : "Link not available";
+            String linkLine = resolveProblemLink(revision);
 
             sb.append(String.format("• %s\n", revision.getProblem().getTitle()));
             sb.append(String.format("  Platform: %s\n", safeValue(revision.getProblem().getPlatform(), "Unknown")));
@@ -244,12 +248,55 @@ public class NotificationService {
             sb.append("\n");
         }
 
-        sb.append("\nKeep going — consistency compounds over time.");
+        sb.append("\nKeep going - consistency compounds over time.");
         return sb.toString();
     }
 
     private String safeValue(String value, String fallback) {
         return (value == null || value.isBlank()) ? fallback : value;
+    }
+
+    private String resolveProblemLink(RevisionSchedule revision) {
+        Problem problem = revision.getProblem();
+        String url = normalizeUrl(problem.getUrl());
+        if (url != null) {
+            // Prefer canonical DB URL when available.
+            return url;
+        }
+
+        String platform = safeValue(problem.getPlatform(), "").toUpperCase(Locale.ROOT);
+        String slug = safeValue(problem.getSlug(), "").trim();
+
+        if (platform.equals("LEETCODE") && !slug.isBlank()) {
+            return "https://leetcode.com/problems/" + slug + "/";
+        }
+        if ((platform.equals("GFG") || platform.equals("GEEKSFORGEEKS")) && !slug.isBlank()) {
+            return "https://www.geeksforgeeks.org/problems/" + slug + "/1";
+        }
+
+        // Unsupported platform or missing URL/slug.
+        return "Link not available";
+    }
+
+    private String normalizeUrl(String rawUrl) {
+        if (rawUrl == null || rawUrl.isBlank()) {
+            return null;
+        }
+
+        String trimmed = rawUrl.trim();
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            return trimmed;
+        }
+        if (trimmed.startsWith("//")) {
+            return "https:" + trimmed;
+        }
+
+        // Imported datasets sometimes store host/path without scheme.
+        if (trimmed.startsWith("www.") || trimmed.contains(".")) {
+            return "https://" + trimmed;
+        }
+
+        return null;
     }
 
     private ZoneId appZoneId() {
