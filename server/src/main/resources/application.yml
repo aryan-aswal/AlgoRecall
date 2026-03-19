@@ -43,6 +43,7 @@ server:
 
 app:
   timezone: ${APP_TIMEZONE:Asia/Kolkata}
+  frontend-url: ${APP_FRONTEND_URL:https://algo-recall-seven.vercel.app}
   jwt:
     secret: ${JWT_SECRET:}
     expiration-ms: 2592000000

@@ -18,8 +18,12 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -187,12 +191,16 @@ public class NotificationService {
                         .thenComparing(RevisionSchedule::getRevisionNumber))
                 .toList();
 
+        Map<Long, List<RevisionSchedule>> scheduleCache = new LinkedHashMap<>();
         for (RevisionSchedule revision : sortedGroup) {
-            List<RevisionSchedule> fullSchedule = revisionScheduleRepository
-                    .findByStudyPlanProblemId(revision.getStudyPlanProblem().getId())
-                    .stream()
-                    .sorted(Comparator.comparing(RevisionSchedule::getRevisionNumber))
-                    .toList();
+            List<RevisionSchedule> fullSchedule = scheduleCache.computeIfAbsent(
+                    revision.getStudyPlanProblem().getId(),
+                    ignored -> revisionScheduleRepository
+                            .findByStudyPlanProblemId(revision.getStudyPlanProblem().getId())
+                            .stream()
+                            .sorted(Comparator.comparing(RevisionSchedule::getRevisionNumber))
+                            .toList()
+            );
 
             String scheduleSummary = fullSchedule.stream()
                     .map(rs -> String.format("R%d: %s (%s)",
@@ -202,22 +210,46 @@ public class NotificationService {
                     .reduce((left, right) -> left + " | " + right)
                     .orElse("No schedule available");
 
+            List<String> pendingSteps = new ArrayList<>();
+            for (RevisionSchedule rs : fullSchedule) {
+                if (rs.getStatus() != RevisionSchedule.Status.PENDING) {
+                    continue;
+                }
+                long days = ChronoUnit.DAYS.between(sessionDate, rs.getScheduledDate());
+                String dayInfo = days == 0
+                        ? "today"
+                        : (days > 0 ? ("in " + days + " day(s)") : (Math.abs(days) + " day(s) ago"));
+                pendingSteps.add(String.format("R%d on %s (%s)",
+                        rs.getRevisionNumber(),
+                        rs.getScheduledDate().format(DATE_FORMATTER),
+                        dayInfo));
+            }
+            String pendingSummary = pendingSteps.isEmpty()
+                    ? "No pending revisions"
+                    : String.join(" | ", pendingSteps);
+
             String problemUrl = revision.getProblem().getUrl();
             String linkLine = (problemUrl != null && !problemUrl.isBlank())
                     ? problemUrl
                     : "Link not available";
 
             sb.append(String.format("• %s\n", revision.getProblem().getTitle()));
-            sb.append(String.format("  Platform: %s\n", revision.getProblem().getPlatform()));
+            sb.append(String.format("  Platform: %s\n", safeValue(revision.getProblem().getPlatform(), "Unknown")));
             sb.append(String.format("  Current Revision: R%d on %s\n",
                     revision.getRevisionNumber(),
                     revision.getScheduledDate().format(DATE_FORMATTER)));
             sb.append(String.format("  Problem Link: %s\n", linkLine));
+            sb.append(String.format("  Pending Revisions: %s\n", pendingSummary));
             sb.append(String.format("  Full Schedule: %s\n", scheduleSummary));
+            sb.append("\n");
         }
 
         sb.append("\nKeep going — consistency compounds over time.");
         return sb.toString();
+    }
+
+    private String safeValue(String value, String fallback) {
+        return (value == null || value.isBlank()) ? fallback : value;
     }
 
     private ZoneId appZoneId() {

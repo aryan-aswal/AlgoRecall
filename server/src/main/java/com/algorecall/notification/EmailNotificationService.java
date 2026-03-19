@@ -28,6 +28,9 @@ public class EmailNotificationService {
     @Value("${spring.mail.username:noreply@algorecall.com}")
     private String fromAddress;
 
+    @Value("${app.frontend-url:https://algo-recall-seven.vercel.app}")
+    private String frontendUrl;
+
     public void send(Notification notification) {
         if (!mailEnabled) {
             log.debug("Email sending disabled. Would have sent to user {}: {}",
@@ -118,7 +121,7 @@ public class EmailNotificationService {
                             %s
                         </div>
                         <p style="text-align: center; margin-top: 20px;">
-                            <a href="http://localhost:3000" class="cta">Open AlgoRecall</a>
+                            <a href="%s" class="cta">Open AlgoRecall</a>
                         </p>
                     </div>
                     <div class="footer">
@@ -127,7 +130,7 @@ public class EmailNotificationService {
                 </div>
             </body>
             </html>
-            """.formatted(username, formattedMessage);
+            """.formatted(username, formattedMessage, frontendUrl);
     }
 
     private String escapeHtml(String value) {
