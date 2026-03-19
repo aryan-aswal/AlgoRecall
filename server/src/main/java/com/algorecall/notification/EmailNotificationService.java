@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service;
 
 import jakarta.mail.internet.MimeMessage;
 
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -20,7 +19,7 @@ import java.util.regex.Pattern;
 public class EmailNotificationService {
 
     private static final Pattern URL_PATTERN = Pattern.compile("(https?://[^\\s<]+)");
-    private static final String SAFE_DEFAULT_FRONTEND_URL = "https://algo-recall-seven.vercel.app";
+    private static final String FRONTEND_URL = "http://localhost:3000";
 
     private final JavaMailSender mailSender;
 
@@ -29,9 +28,6 @@ public class EmailNotificationService {
 
     @Value("${spring.mail.username:noreply@algorecall.com}")
     private String fromAddress;
-
-    @Value("${app.frontend-url:https://algo-recall-seven.vercel.app}")
-    private String frontendUrl;
 
     public void send(Notification notification) {
         if (!mailEnabled) {
@@ -65,7 +61,7 @@ public class EmailNotificationService {
     private String buildHtmlBody(Notification notification) {
         String username = notification.getUser().getUsername();
         String rawMessage = notification.getMessage();
-        String ctaUrl = resolveFrontendUrl();
+        String ctaUrl = FRONTEND_URL;
 
         // Convert bullet points/newlines to HTML and auto-link URLs in the message.
         String[] lines = rawMessage.split("\n");
@@ -156,28 +152,5 @@ public class EmailNotificationService {
         }
         matcher.appendTail(sb);
         return sb.toString();
-    }
-
-    private String resolveFrontendUrl() {
-        String candidate = frontendUrl;
-        if (candidate == null || candidate.isBlank()) {
-            return SAFE_DEFAULT_FRONTEND_URL;
-        }
-
-        String trimmed = candidate.trim();
-        String lowered = trimmed.toLowerCase(Locale.ROOT);
-        if (!lowered.startsWith("http://") && !lowered.startsWith("https://")) {
-            trimmed = "https://" + trimmed;
-            lowered = trimmed.toLowerCase(Locale.ROOT);
-        }
-
-        if (lowered.contains("://localhost")
-                || lowered.contains("://127.0.0.1")
-                || lowered.contains("://0.0.0.0")) {
-            log.warn("Unsafe frontend URL '{}' detected in mail config; using safe default", frontendUrl);
-            return SAFE_DEFAULT_FRONTEND_URL;
-        }
-
-        return trimmed;
     }
 }
